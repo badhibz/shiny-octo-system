@@ -1,0 +1,20 @@
+name: Build IPA
+on: [push]
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Dependencies
+        run: npm install # Ou la commande de ton projet
+      - name: Build iOS
+        run: |
+          # Cette commande crée une archive Xcode
+          xcodebuild -project ios/App.xcodeproj -scheme App -sdk iphoneos -configuration Release archive -archivePath $PWD/build/App.xcarchive
+          # Cette commande génère l'IPA (non signé)
+          xcodebuild -exportArchive -archivePath $PWD/build/App.xcarchive -exportOptionsPlist exportOptions.plist -exportPath $PWD/build/ipa
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ios
+          path: build/ipa/*.ipa
