@@ -1,4 +1,4 @@
-name: Debug Build IPA
+name: Build Base44 IPA
 on: [push]
 
 jobs:
@@ -7,51 +7,45 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Node.js
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install Dependencies
-        run: npm install
+      - name: 1. Install Dependencies & Capacitor (MISSING IN YOUR PACKAGE.JSON)
+        run: |
+          npm install
+          # ON INSTALLE CAPACITOR DE FORCE CAR IL N'EST PAS DANS TON PACKAGE.JSON
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
 
-      - name: Build Web Project (Create 'dist')
+      - name: 2. Build Web Project
         run: |
           npm run build
-          # VÉRIFICATION : On regarde si le dossier dist existe
-          echo "📂 Contenu du dossier actuel :"
-          ls -R
+          # Vérification que le dossier 'dist' existe bien (Vite output)
+          if [ -d "dist" ]; then echo "✅ Build Web OK"; else echo "❌ Build Web échoué"; exit 1; fi
 
-      - name: Initialize Capacitor
+      - name: 3. Initialize Capacitor App
         run: |
-          npm install @capacitor/core @capacitor/cli @capacitor/ios
-          npx cap init "MonApp" "com.monapp.app" --web-dir dist
-
-      - name: Add iOS Platform (FORCE)
-        run: |
-          # On essaie d'ajouter iOS
-          npx cap add ios
+          # On initialise le projet native
+          npx cap init "Base44App" "com.base44.app" --web-dir dist
           
-          # VÉRIFICATION : Est-ce que le dossier ios existe maintenant ?
-          echo "📂 Contenu du dossier ios/ :"
-          if [ -d "ios" ]; then
-            ls -R ios/
-          else
-            echo "❌ CRITIQUE : Le dossier ios n'a pas été créé !"
-            exit 1
-          fi
+          # On ajoute iOS
+          npx cap add ios
 
-      - name: Fix Versions
+      - name: 4. Fix Version Conflict (Force iOS 15.0)
         run: |
+          # Correction du Podfile
           sed -i '' "s/platform :ios, .*/platform :ios, '15.0'/" ios/App/Podfile
+          
+          # Correction du Projet Xcode (Le plus important)
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/App/App.xcodeproj/project.pbxproj
+          
+          # Synchronisation finale
+          npx cap sync ios
 
-      - name: Update Dependencies
-        run: npx cap update ios
-
-      - name: Build IPA
+      - name: 5. Build IPA (Unsigned)
         run: |
-          # Utilisation du chemin confirmé par Capacitor
+          # On utilise le Workspace créé par Capacitor
           xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
                      -configuration Release \
@@ -62,6 +56,7 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_IDENTITY=""
 
+          # Création du paquet
           mkdir -p build/ipa/Payload
           cp -r build/App.xcarchive/Products/Applications/App.app build/ipa/Payload/
           cd build/ipa
@@ -70,5 +65,5 @@ jobs:
       - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: my-debug-app
+          name: base44-app-ipa
           path: build/App.ipa
