@@ -18,17 +18,28 @@ jobs:
       - name: Build Web Project
         run: npm run build
 
-      - name: Add Capacitor & iOS Platform
+      - name: Add Capacitor & Fix iOS Version
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/ios
           npx cap init "MonApp" "com.monapp.app" --web-dir dist
-          npx cap add ios
+          
+          # L'astuce est ici : on ajoute "|| true" pour ne pas stopper si ça plante
+          echo "Création du projet iOS..."
+          npx cap add ios || true
 
-      - name: Force iOS Deployment Target (Fix Pod Error)
-        run: |
-          # Cette ligne remplace la version iOS par 15.0 dans le fichier Podfile
-          sed -i '' 's/platform :ios, .*/platform :ios, "15.0"/' ios/App/Podfile
-          npx cap sync ios
+          # Maintenant que les fichiers sont là, on force iOS 15.0
+          echo "Correction de la version iOS dans le Podfile..."
+          if [ -f "ios/App/Podfile" ]; then
+            sed -i '' "s/platform :ios, .*/platform :ios, '15.0'/" ios/App/Podfile
+            echo "Podfile corrigé."
+          else
+            echo "ERREUR: Le Podfile n'a pas été créé."
+            exit 1
+          fi
+
+          # On relance la synchronisation proprement
+          echo "Relance de l'installation des dépendances..."
+          npx cap update ios
 
       - name: Build App Archive
         run: |
@@ -38,7 +49,9 @@ jobs:
                      -sdk iphoneos \
                      -archivePath $PWD/build/App.xcarchive \
                      clean archive \
-                     CODE_SIGNING_ALLOWED=NO
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_IDENTITY=""
 
       - name: Create IPA (Unsigned)
         run: |
