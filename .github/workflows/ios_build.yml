@@ -1,4 +1,4 @@
-name: Build IPA
+name: Build IPA Final v2
 on: [push]
 
 jobs:
@@ -18,30 +18,34 @@ jobs:
       - name: Build Web Project
         run: npm run build
 
-      - name: Add Capacitor & Fix iOS Version
+      - name: Initialize Capacitor & iOS
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/ios
           npx cap init "MonApp" "com.monapp.app" --web-dir dist
           
-          # L'astuce est ici : on ajoute "|| true" pour ne pas stopper si ça plante
-          echo "Création du projet iOS..."
+          # On lance la création, on ignore l'erreur du premier coup
           npx cap add ios || true
 
-          # Maintenant que les fichiers sont là, on force iOS 15.0
-          echo "Correction de la version iOS dans le Podfile..."
+      - name: Fix iOS Version EVERYWHERE (Podfile & Project)
+        run: |
+          # 1. Correction du Podfile (pour les bibliothèques)
           if [ -f "ios/App/Podfile" ]; then
             sed -i '' "s/platform :ios, .*/platform :ios, '15.0'/" ios/App/Podfile
-            echo "Podfile corrigé."
+            echo "✅ Podfile mis à jour vers iOS 15.0"
           else
-            echo "ERREUR: Le Podfile n'a pas été créé."
+            echo "❌ Erreur: Podfile introuvable."
             exit 1
           fi
 
-          # On relance la synchronisation proprement
-          echo "Relance de l'installation des dépendances..."
-          npx cap update ios
+          # 2. Correction du Projet Xcode (C'est ce qu'il manquait !)
+          # On cherche la ligne IPHONEOS_DEPLOYMENT_TARGET et on force 15.0 partout
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/App/App.xcodeproj/project.pbxproj
+          echo "✅ Projet Xcode (pbxproj) mis à jour vers iOS 15.0"
 
-      - name: Build App Archive
+      - name: Install Pods Correctly
+        run: npx cap update ios
+
+      - name: Build IPA (Unsigned)
         run: |
           xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
@@ -53,15 +57,5 @@ jobs:
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGNING_IDENTITY=""
 
-      - name: Create IPA (Unsigned)
-        run: |
           mkdir -p build/ipa/Payload
-          cp -r build/App.xcarchive/Products/Applications/App.app build/ipa/Payload/
-          cd build/ipa
-          zip -r ../App.ipa Payload
-          
-      - name: Upload IPA
-        uses: actions/upload-artifact@v4
-        with:
-          name: my-app-ipa
-          path: build/App.ipa
+          cp -r build/App
