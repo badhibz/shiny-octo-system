@@ -1,0 +1,63 @@
+name: Build Base44 Final
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: 1. Install Dependencies & Tools
+        run: |
+          npm install
+          # ON AJOUTE LES OUTILS MANQUANTS À TON PROJET
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
+
+      - name: 2. Build Web Project
+        run: npm run build
+
+      - name: 3. Create iOS App
+        run: |
+          # On initialise l'app mobile
+          npx cap init "Base44App" "com.base44.app" --web-dir dist
+          # On crée le dossier ios
+          npx cap add ios
+
+      - name: 4. Fix Version Conflict (iOS 15.0)
+        run: |
+          # Cette étape est cruciale pour éviter l'erreur de compilation
+          sed -i '' "s/platform :ios, .*/platform :ios, '15.0'/" ios/App/Podfile
+          sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/App/App.xcodeproj/project.pbxproj
+          
+          # On valide les changements
+          npx cap update ios
+
+      - name: 5. Build IPA (Workspace Mode)
+        run: |
+          # Note: On utilise bien le WORKSPACE ici
+          xcodebuild -workspace ios/App/App.xcworkspace \
+                     -scheme App \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -archivePath $PWD/build/App.xcarchive \
+                     clean archive \
+                     CODE_SIGNING_ALLOWED=NO \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGNING_IDENTITY=""
+
+          # Création du fichier .ipa
+          mkdir -p build/ipa/Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app build/ipa/Payload/
+          cd build/ipa
+          zip -r ../App.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: mon-application-base44
+          path: build/App.ipa
