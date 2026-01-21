@@ -1,4 +1,4 @@
-name: Build IPA Final v2
+name: Debug Build IPA
 on: [push]
 
 jobs:
@@ -15,38 +15,43 @@ jobs:
       - name: Install Dependencies
         run: npm install
 
-      - name: Build Web Project
-        run: npm run build
+      - name: Build Web Project (Create 'dist')
+        run: |
+          npm run build
+          # VÉRIFICATION : On regarde si le dossier dist existe
+          echo "📂 Contenu du dossier actuel :"
+          ls -R
 
-      - name: Initialize Capacitor & iOS
+      - name: Initialize Capacitor
         run: |
           npm install @capacitor/core @capacitor/cli @capacitor/ios
           npx cap init "MonApp" "com.monapp.app" --web-dir dist
-          
-          # On lance la création, on ignore l'erreur du premier coup
-          npx cap add ios || true
 
-      - name: Fix iOS Version EVERYWHERE (Podfile & Project)
+      - name: Add iOS Platform (FORCE)
         run: |
-          # 1. Correction du Podfile (pour les bibliothèques)
-          if [ -f "ios/App/Podfile" ]; then
-            sed -i '' "s/platform :ios, .*/platform :ios, '15.0'/" ios/App/Podfile
-            echo "✅ Podfile mis à jour vers iOS 15.0"
+          # On essaie d'ajouter iOS
+          npx cap add ios
+          
+          # VÉRIFICATION : Est-ce que le dossier ios existe maintenant ?
+          echo "📂 Contenu du dossier ios/ :"
+          if [ -d "ios" ]; then
+            ls -R ios/
           else
-            echo "❌ Erreur: Podfile introuvable."
+            echo "❌ CRITIQUE : Le dossier ios n'a pas été créé !"
             exit 1
           fi
 
-          # 2. Correction du Projet Xcode (C'est ce qu'il manquait !)
-          # On cherche la ligne IPHONEOS_DEPLOYMENT_TARGET et on force 15.0 partout
+      - name: Fix Versions
+        run: |
+          sed -i '' "s/platform :ios, .*/platform :ios, '15.0'/" ios/App/Podfile
           sed -i '' 's/IPHONEOS_DEPLOYMENT_TARGET = .*;/IPHONEOS_DEPLOYMENT_TARGET = 15.0;/g' ios/App/App.xcodeproj/project.pbxproj
-          echo "✅ Projet Xcode (pbxproj) mis à jour vers iOS 15.0"
 
-      - name: Install Pods Correctly
+      - name: Update Dependencies
         run: npx cap update ios
 
-      - name: Build IPA (Unsigned)
+      - name: Build IPA
         run: |
+          # Utilisation du chemin confirmé par Capacitor
           xcodebuild -workspace ios/App/App.xcworkspace \
                      -scheme App \
                      -configuration Release \
@@ -58,4 +63,12 @@ jobs:
                      CODE_SIGNING_IDENTITY=""
 
           mkdir -p build/ipa/Payload
-          cp -r build/App
+          cp -r build/App.xcarchive/Products/Applications/App.app build/ipa/Payload/
+          cd build/ipa
+          zip -r ../App.ipa Payload
+
+      - name: Upload IPA
+        uses: actions/upload-artifact@v4
+        with:
+          name: my-debug-app
+          path: build/App.ipa
