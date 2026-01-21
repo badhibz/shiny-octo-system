@@ -1,0 +1,24 @@
+name: Build IPA
+on: [push]
+
+jobs:
+  build:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      # Si ton projet utilise Node (React Native/Ionic)
+      - name: Install Dependencies
+        run: npm install 
+
+      - name: Build IPA
+        run: |
+          # Commande pour compiler (exemple standard)
+          xcodebuild -project ios/*.xcodeproj -scheme "YourAppName" -sdk iphoneos -configuration Release archive -archivePath $PWD/build/App.xcarchive
+          xcodebuild -exportArchive -archivePath $PWD/build/App.xcarchive -exportOptionsPlist exportOptions.plist -exportPath $PWD/build/ipa
+          
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-ipa
+          path: build/ipa/*.ipa
