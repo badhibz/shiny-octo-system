@@ -6,19 +6,44 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      
-      # Si ton projet utilise Node (React Native/Ionic)
-      - name: Install Dependencies
-        run: npm install 
 
-      - name: Build IPA
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build Web Project
+        run: npm run build # Cela crée le dossier 'dist'
+
+      - name: Add Capacitor & iOS Platform
         run: |
-          # Commande pour compiler (exemple standard)
-          xcodebuild -project ios/*.xcodeproj -scheme "YourAppName" -sdk iphoneos -configuration Release archive -archivePath $PWD/build/App.xcarchive
-          xcodebuild -exportArchive -archivePath $PWD/build/App.xcarchive -exportOptionsPlist exportOptions.plist -exportPath $PWD/build/ipa
+          npm install @capacitor/core @capacitor/cli @capacitor/ios
+          npx cap init "MonApp" "com.monapp.app" --web-dir dist
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Build App Archive
+        run: |
+          xcodebuild -workspace ios/App/App.xcworkspace \
+                     -scheme App \
+                     -configuration Release \
+                     -sdk iphoneos \
+                     -archivePath $PWD/build/App.xcarchive \
+                     clean archive \
+                     CODE_SIGNING_ALLOWED=NO
+
+      - name: Create IPA (Unsigned)
+        run: |
+          mkdir -p build/ipa/Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app build/ipa/Payload/
+          cd build/ipa
+          zip -r ../App.ipa Payload
           
-      - name: Upload Artifact
+      - name: Upload IPA
         uses: actions/upload-artifact@v4
         with:
-          name: app-ipa
-          path: build/ipa/*.ipa
+          name: my-app-ipa
+          path: build/App.ipa
